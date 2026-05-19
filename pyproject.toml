@@ -8,6 +8,9 @@ authors = [
 requires-python = ">=3.14"
 dependencies = []
 
+[dependency-groups]
+dev = ["pytest>=9.0.3"]
+
 [project.scripts]
 es-optimizer = "es_optimizer:main"
 

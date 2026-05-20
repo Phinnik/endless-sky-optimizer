@@ -51,6 +51,8 @@ def load_ships(tree: Node) -> list[Ship]:
                 cargo_space=int(a.get("cargo space", 0)),
                 outfit_space=int(a["outfit space"]),
                 weapon_capacity=int(a.get("weapon capacity", 0)),
+                gun_ports=gun_ports,
+                turret_mounts=turret_mounts,
                 engine_capacity=int(a["engine capacity"]),
             )
         )

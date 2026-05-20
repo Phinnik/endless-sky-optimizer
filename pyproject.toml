@@ -6,7 +6,10 @@ authors = [
     { name = "Filipp Zdorov", email = "12518419+Phinnik@users.noreply.github.com" },
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pulp>=3.3.1",
+    "rich>=15.0.0",
+]
 
 [dependency-groups]
 dev = ["pytest>=9.0.3"]

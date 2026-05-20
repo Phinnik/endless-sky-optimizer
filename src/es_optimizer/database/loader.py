@@ -1,5 +1,5 @@
 from es_optimizer.database.parser import Node
-from es_optimizer.database.models import Ship, ShipCategory
+from es_optimizer.database.models import Ship, ShipCategory, Weapon, WeaponCategory
 
 
 def load_ships(tree: Node) -> list[Ship]:
@@ -40,3 +40,60 @@ def load_ships(tree: Node) -> list[Ship]:
         ships.append(ship)
 
     return ships
+
+
+def load_weapons(tree: Node) -> list[Weapon]:
+    weapons: list[Weapon] = []
+
+    for node in tree.children:
+        if node.key in ["outfitter", "effect"]:
+            continue
+        assert node.key == "outfit"
+        assert isinstance(node.value, str), node.value
+
+        outfit_attributes: dict[str, str] = {}
+        for c in node.children:
+            if not c.children and isinstance(c.value, str):
+                assert c.key
+                outfit_attributes[c.key] = c.value
+
+        # Skip ammunition and subammunition
+        if outfit_attributes.get("category") in ["Ammunition", None]:
+            continue
+
+        weapon_node = [c for c in node.children if c.key == "weapon"][0]
+
+        weapon_attributes: dict[str, str] = {}
+        for c in weapon_node.children:
+            if c.key in [
+                "hit effect",
+                "hardpoint offset",
+                "submunition",
+                "homing",
+                "stream",
+                "triggers nuke alert",
+                "cluster",
+                "ammo",
+            ]:
+                continue
+            assert c.key
+            assert isinstance(c.value, str), c.key
+            weapon_attributes[c.key] = c.value
+        weapon = Weapon(
+            name=node.value,
+            category=WeaponCategory(outfit_attributes["category"]),
+            cost=int(outfit_attributes["cost"]),
+            mass=int(outfit_attributes["mass"]),
+            outfit_space=int(outfit_attributes["outfit space"]),
+            weapon_capacity=int(outfit_attributes["weapon capacity"]),
+            gun_ports=int(outfit_attributes.get("gun ports", 0)),
+            inaccuracy=float(weapon_attributes.get("inaccuracy", 0)),
+            lifetime=int(weapon_attributes["lifetime"]),
+            reload=float(weapon_attributes["reload"]),
+            firing_energy=float(weapon_attributes["firing energy"]),
+            firing_heat=float(weapon_attributes["firing heat"]),
+            shield_damage=float(weapon_attributes.get("shield damage", 0)),
+            hull_damage=float(weapon_attributes.get("hull damage", 0)),
+        )
+        weapons.append(weapon)
+    return weapons

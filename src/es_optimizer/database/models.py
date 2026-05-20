@@ -34,3 +34,28 @@ class Ship:
     outfit_space: int
     weapon_capacity: int
     engine_capacity: int
+
+
+class WeaponCategory(Enum):
+    Turrets = "Turrets"
+    SecondaryWeapons = "Secondary Weapons"
+    Guns = "Guns"
+
+
+@dataclass
+class Weapon:
+    name: str
+
+    category: WeaponCategory
+    cost: int
+    mass: int
+    outfit_space: int
+    weapon_capacity: int
+    gun_ports: int
+    inaccuracy: float
+    lifetime: int
+    reload: float
+    firing_energy: float
+    firing_heat: float
+    shield_damage: float
+    hull_damage: float

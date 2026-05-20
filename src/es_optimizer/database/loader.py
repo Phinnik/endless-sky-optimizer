@@ -111,6 +111,17 @@ def load_outfits(tree: Node) -> list[Outfit]:
                 solar_collection=float(a.get("solar collection", 0)),
                 energy_generation=float(a.get("energy generation", 0)),
                 energy_capacity=float(a.get("energy capacity", 0)),
+                reverse_thrusting_energy=float(a.get("reverse thrusting energy", 0)),
+                turning_energy=float(a.get("turning energy", 0)),
+                thrust=float(a.get("thrust", 0)),
+                thrusting_heat=float(a.get("thrusting heat", 0)),
+                turning_heat=float(a.get("turning heat", 0)),
+                reverse_thrust=float(a.get("reverse thrust", 0)),
+                thrusting_energy=float(a.get("thrusting energy", 0)),
+                engine_capacity=float(a.get("engine capacity", 0)),
+                turn=float(a.get("turn", 0)),
+                reverse_thrusting_heat=float(a.get("reverse thrusting heat", 0)),
+                weapon_capacity=float(a.get("weapon capacity", 0)),
             )
         )
     return outfits

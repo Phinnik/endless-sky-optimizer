@@ -85,3 +85,14 @@ class Outfit:
     solar_collection: float
     energy_generation: float
     energy_capacity: float
+    reverse_thrusting_energy: float
+    turning_energy: float
+    thrust: float
+    thrusting_heat: float
+    turning_heat: float
+    reverse_thrust: float
+    thrusting_energy: float
+    engine_capacity: float
+    turn: float
+    reverse_thrusting_heat: float
+    weapon_capacity: float

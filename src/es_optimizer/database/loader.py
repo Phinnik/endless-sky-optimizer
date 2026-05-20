@@ -27,6 +27,14 @@ def load_ships(tree: Node) -> list[Ship]:
         attrs_node = next(c for c in ship_node.children if c.key == "attributes")
         a = _attrs(attrs_node)
 
+        gun_ports = 0
+        turret_mounts = 0
+        for child in ship_node.children:
+            if child.key == "gun":
+                gun_ports += 1
+            if child.key == "turret":
+                turret_mounts += 1
+
         ships.append(
             Ship(
                 name=ship_node.value,

@@ -33,6 +33,8 @@ class Ship:
     cargo_space: int
     outfit_space: int
     weapon_capacity: int
+    gun_ports: int
+    turret_mounts: int
     engine_capacity: int
 
 

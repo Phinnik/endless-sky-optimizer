@@ -72,6 +72,7 @@ def load_weapons(tree: Node) -> list[Weapon]:
                 mass=int(outfit_a["mass"]),
                 outfit_space=int(outfit_a["outfit space"]),
                 weapon_capacity=int(outfit_a["weapon capacity"]),
+                turret_mounts=int(outfit_a.get("turret mounts", 0)),
                 gun_ports=int(outfit_a.get("gun ports", 0)),
                 inaccuracy=float(weapon_a.get("inaccuracy", 0)),
                 lifetime=int(weapon_a["lifetime"]),

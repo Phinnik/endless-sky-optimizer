@@ -52,6 +52,7 @@ class Weapon:
     outfit_space: int
     weapon_capacity: int
     gun_ports: int
+    turret_mounts: int
     inaccuracy: float
     lifetime: int
     reload: float

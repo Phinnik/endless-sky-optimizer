@@ -59,3 +59,29 @@ class Weapon:
     firing_heat: float
     shield_damage: float
     hull_damage: float
+
+
+class OutfitCategory(Enum):
+    Systems = "Systems"
+    Power = "Power"
+    Engines = "Engines"
+
+
+@dataclass
+class Outfit:
+    name: str
+
+    category: OutfitCategory
+    cost: float
+    mass: float
+    outfit_space: float
+    cooling: float
+    shield_generation: float
+    shield_energy: float
+    energy_consumption: float
+    heat_generation: float
+    fuel_capacity: float
+    required_crew: float
+    solar_collection: float
+    energy_generation: float
+    energy_capacity: float

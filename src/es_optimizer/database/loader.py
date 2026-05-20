@@ -1,5 +1,12 @@
 from es_optimizer.database.parser import Node
-from es_optimizer.database.models import Ship, ShipCategory, Weapon, WeaponCategory
+from es_optimizer.database.models import (
+    Outfit,
+    OutfitCategory,
+    Ship,
+    ShipCategory,
+    Weapon,
+    WeaponCategory,
+)
 
 
 def load_ships(tree: Node) -> list[Ship]:
@@ -97,3 +104,40 @@ def load_weapons(tree: Node) -> list[Weapon]:
         )
         weapons.append(weapon)
     return weapons
+
+
+def load_outfits(tree: Node) -> list[Outfit]:
+    outfits: list[Outfit] = []
+
+    for node in tree.children:
+        assert isinstance(node.value, str)
+
+        attributes: dict[str, str] = {}
+        for c in node.children:
+            if c.key != "description":
+                assert c.key is not None
+                assert isinstance(c.value, str)
+                attributes[c.key] = c.value
+        if attributes["category"] not in ["Systems", "Power", "Engines"]:
+            continue
+
+        outfit = Outfit(
+            name=node.value,
+            category=OutfitCategory(attributes["category"]),
+            cost=float(attributes.get("cost", 0)),
+            mass=float(attributes.get("mass", 0)),
+            outfit_space=float(attributes.get("outfit space", 0)),
+            cooling=float(attributes.get("cooling", 0)),
+            shield_generation=float(attributes.get("shield generation", 0)),
+            shield_energy=float(attributes.get("shield energy", 0)),
+            energy_consumption=float(attributes.get("energy consumption", 0)),
+            heat_generation=float(attributes.get("heat generation", 0)),
+            fuel_capacity=float(attributes.get("fuel capacity", 0)),
+            required_crew=float(attributes.get("required crew", 0)),
+            solar_collection=float(attributes.get("solar collection", 0)),
+            energy_generation=float(attributes.get("energy generation", 0)),
+            energy_capacity=float(attributes.get("energy capacity", 0)),
+        )
+        outfits.append(outfit)
+
+    return outfits

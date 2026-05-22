@@ -1,4 +1,7 @@
-from es_optimizer.database.parser import Node
+from dataclasses import dataclass
+from pathlib import Path
+
+from es_optimizer.database.parser import Node, make_tree
 from es_optimizer.database.models import (
     Outfit,
     OutfitCategory,
@@ -7,6 +10,7 @@ from es_optimizer.database.models import (
     Weapon,
     WeaponCategory,
 )
+from es_optimizer.config import data_dir
 
 
 def _attrs(node: Node) -> dict[str, str]:
@@ -136,3 +140,27 @@ def load_outfits(tree: Node) -> list[Outfit]:
             )
         )
     return outfits
+
+
+@dataclass
+class DataBase:
+    ships: dict[str, Ship]
+    weapons: dict[str, Weapon]
+    outfits: dict[str, Outfit]
+
+
+def load(data: str | Path = data_dir) -> DataBase:
+    data = Path(data)
+
+    ships = {s.name: s for s in load_ships(make_tree((data / "ships.txt").read_text()))}
+    weapons = {
+        w.name: w for w in load_weapons(make_tree((data / "weapons.txt").read_text()))
+    }
+    outfits = {
+        s.name: s
+        for s in load_outfits(make_tree((data / "outfits.txt").read_text()))
+        + load_outfits(make_tree((data / "engines.txt").read_text()))
+        + load_outfits(make_tree((data / "power.txt").read_text()))
+    }
+
+    return DataBase(ships=ships, weapons=weapons, outfits=outfits)

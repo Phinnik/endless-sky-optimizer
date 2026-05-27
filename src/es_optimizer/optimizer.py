@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 
 import pulp
@@ -22,18 +22,52 @@ class SolutionResult:
     outfits: dict[Outfit, int]
 
 
-def get_solution(db: DataBase, target_ship: Ship) -> SolutionResult:
+@dataclass
+class Settings:
+    outfit_count_upper_bound = 50
+
+    combat_intencity = 0.5
+    burst_time = 30
+
+    heat_safety_factor = 0.95
+
+    enemy_paper_DPS = 1500
+    combat_efficiency = 0.20
+
+    target_top_speed = 300  # units/sec
+    target_acceleration = 75  # units/sec²
+    target_turn_rate = 60  # deg/sec
+
+    shield_dps_weight: float = 100
+    hull_dps_weight: float = 0.5
+    cost_weight: float = 0.000_000_001
+
+    required_outfits: dict[str, int] = field(default_factory=lambda: {"Hyperdrive": 1})
+    required_weapons: dict[str, int] = field(
+        default_factory=lambda: {"Anti-Missile Turret": 1}
+    )
+
+
+def get_solution(db: DataBase, ship: Ship, settings: Settings) -> SolutionResult:
     prob = pulp.LpProblem(sense=pulp.LpMaximize)
 
     weapons_count: dict[str, pulp.LpVariable] = pulp.LpVariable.dict(
-        "weapons_count", db.weapons.keys(), 0, 50, cat=pulp.LpInteger
+        "weapons_count",
+        db.weapons.keys(),
+        0,
+        settings.outfit_count_upper_bound,
+        cat=pulp.LpInteger,
     )
     outfits_count: dict[str, pulp.LpVariable] = pulp.LpVariable.dict(
-        "outfits_count", db.outfits.keys(), 0, 50, cat=pulp.LpInteger
+        "outfits_count",
+        db.outfits.keys(),
+        0,
+        settings.outfit_count_upper_bound,
+        cat=pulp.LpInteger,
     )
 
     cost = pulp.LpAffineExpression()
-    total_mass = pulp.LpAffineExpression(target_ship.mass)
+    total_mass = pulp.LpAffineExpression(ship.mass)
 
     outfit_space = pulp.LpAffineExpression()
     weapon_capacity = pulp.LpAffineExpression()
@@ -67,11 +101,11 @@ def get_solution(db: DataBase, target_ship: Ship) -> SolutionResult:
 
         cost += weapon.cost * v
         total_mass += weapon.mass * v
-        burst_energy += (weapon.firing_energy * 60 / weapon.reload) * v
-        burst_heat += (weapon.firing_heat * 60 / weapon.reload) * v
+        burst_energy += (weapon.firing_energy / weapon.reload) * v * FPS
+        burst_heat += (weapon.firing_heat / weapon.reload) * v * FPS
 
-        shield_dps += (weapon.shield_damage * 60 / weapon.reload) * v
-        hull_dps += (weapon.hull_damage * 60 / weapon.reload) * v
+        shield_dps += (weapon.shield_damage / weapon.reload) * v * FPS
+        hull_dps += (weapon.hull_damage / weapon.reload) * v * FPS
 
         outfit_space += weapon.outfit_space * v
         weapon_capacity += weapon.weapon_capacity * v
@@ -95,11 +129,6 @@ def get_solution(db: DataBase, target_ship: Ship) -> SolutionResult:
         burst_energy += outfit.turning_energy * v * FPS
         burst_heat += outfit.turning_heat * v * FPS
 
-        # # TODO: Thrusting cannot be done forward and backward simultaniously
-        # total_reverse_thrust += outfit.reverse_thrust * v
-        # total_max_energy_cost += outfit.reverse_thrusting_energy * v
-        # total_max_heat_cost += outfit.reverse_thrusting_heat * v
-
         energy_capacity += outfit.energy_capacity * v
         energy_generation += outfit.energy_generation * v * FPS
         solar_collection += outfit.solar_collection * v * FPS
@@ -111,51 +140,47 @@ def get_solution(db: DataBase, target_ship: Ship) -> SolutionResult:
         weapon_capacity += outfit.weapon_capacity * v
         engine_capacity += outfit.engine_capacity * v
 
-    prob += outfits_count["Hyperdrive"] == 1
-    prob += weapons_count["Anti-Missile Turret"] == 1
+    for outfit, count in settings.required_outfits.items():
+        prob += outfits_count[outfit] == count
+    for outfit, count in settings.required_weapons.items():
+        prob += weapons_count[outfit] == count
 
     # Space and capacity
-    prob += outfit_space + target_ship.outfit_space >= 0
-    prob += weapon_capacity + target_ship.weapon_capacity >= 0
-    prob += gun_ports + target_ship.gun_ports >= 0
-    prob += turret_mounts + target_ship.turret_mounts >= 0
-    prob += engine_capacity + target_ship.engine_capacity >= 0
+    prob += outfit_space + ship.outfit_space >= 0
+    prob += weapon_capacity + ship.weapon_capacity >= 0
+    prob += gun_ports + ship.gun_ports >= 0
+    prob += turret_mounts + ship.turret_mounts >= 0
+    prob += engine_capacity + ship.engine_capacity >= 0
 
     # Energy
     # TODO: Review theese constraints: are they optimal? What problem do they solve?
-    combat_intencity = 0.5  # TODO: make a setting
-    burst_time = 30  # TODO: make a setting
-    prob += energy_generation >= (idle_energy + burst_energy * combat_intencity)
-    prob += energy_capacity >= (burst_energy - energy_generation) * burst_time
+    prob += energy_generation >= (
+        idle_energy + burst_energy * settings.combat_intencity
+    )
+    prob += energy_capacity >= (burst_energy - energy_generation) * settings.burst_time
 
     # Heat and cooling
-    heat_safety_factor = 0.95  # TODO: make a setting
     max_heat = total_mass * 100  # 100 - MAXIMUM_TEMPERATURE
     heat_equilibrium = (idle_heat + burst_heat - total_cooling) / (
-        target_ship.heat_dissipation * 0.001 * FPS
+        ship.heat_dissipation * 0.001 * FPS
     )
-    prob += heat_equilibrium <= (heat_safety_factor * max_heat)
+    prob += heat_equilibrium <= (settings.heat_safety_factor * max_heat)
 
     # Shield generation
     # Note: incoming_DPS != paper_DPS (movement, misses, kills etc.)
-    enemy_paper_DPS = 1500  # TODO: make a setting
-    combat_efficiency = 0.20  # TODO: make a setting
-    expected_incoming_DPS = enemy_paper_DPS * combat_efficiency
-    prob += shield_generation >= combat_efficiency * expected_incoming_DPS
+    expected_incoming_DPS = settings.enemy_paper_DPS * settings.combat_efficiency
+    prob += shield_generation >= settings.combat_efficiency * expected_incoming_DPS
 
     # Movement
     # TODO: support reverse thrust
-    target_top_speed = 300  # units/sec # TODO: make a setting
-    target_acceleration = 75  # units/sec² # TODO: make a setting
-    target_turn_rate = 60  # deg/sec # TODO: make a setting
-
-    prob += thrust >= target_top_speed * target_ship.drag / FPS
-    prob += thrust * FPS**2 >= target_acceleration * total_mass
-    prob += turn * FPS >= target_turn_rate * total_mass
+    prob += thrust >= settings.target_top_speed * ship.drag / FPS
+    prob += thrust * FPS**2 >= settings.target_acceleration * total_mass
+    prob += turn * FPS >= settings.target_turn_rate * total_mass
 
     # Objective
-    # TODO: make coefficients as settings
-    prob += (10000 * shield_dps + 0.5 * hull_dps) - cost / 10_000_000
+    prob += (
+        settings.shield_dps_weight * shield_dps + settings.hull_dps_weight * hull_dps
+    ) - settings.cost_weight * cost
 
     status = prob.solve(solver=pulp.PULP_CBC_CMD(msg=False))
     assert status == pulp.LpStatusOptimal, (
@@ -320,7 +345,6 @@ def get_heat_and_energy_table(solution: SolutionResult, ship: Ship) -> Table:
     table.add_row("burst", f"{burst_energy:,.0f}", f"{burst_heat:,.0f}")
 
     table.add_row("heat_equilibrium", "", f"{heat_equilibrium:,.0f}")
-    table.add_row("max")  # TODO: max - energy capacity and max temperature
     return table
 
 
@@ -365,7 +389,9 @@ def main():
 
     solution = baseline
 
-    solution = get_solution(db, target_ship)
+    settings = Settings()
+
+    solution = get_solution(db, target_ship, settings)
 
     console.print(Rule("Results"))
     console.print(get_shopping_list_table(solution))
@@ -388,15 +414,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# fmt: off
-# debug_table = Table(title="parameters_table")
-# debug_table.add_row("total_shield_generation", str(total_shield_generation.value()))
-# debug_table.add_row("total_energy_capacity", str(total_energy_capacity.value()))
-# debug_table.add_row("H_eq", str(H_eq.value()))
-# debug_table.add_row("safety × max_h", str((safety_factor * max_heat).value()))
-# debug_table.add_row("heat_in/sec", str(total_max_heat_cost.value()))
-# debug_table.add_row("cooling/sec", str(total_cooling.value()))
-# debug_table.add_row("slack to cap", str((safety_factor * max_heat - H_eq).value()))
-# fmt: on

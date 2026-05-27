@@ -18,25 +18,25 @@ FPS = 60
 
 @dataclass(frozen=True)
 class SolutionResult:
-    weapons: dict[Weapon, int]
     outfits: dict[Outfit, int]
+    weapons: dict[Weapon, int]
 
 
 @dataclass
 class Settings:
     outfit_count_upper_bound = 50
 
-    combat_intencity = 0.5
-    burst_time = 30
+    combat_intensity: float = 0.5
+    burst_time: float = 30
 
-    heat_safety_factor = 0.95
+    heat_safety_factor: float = 0.95
 
-    enemy_paper_DPS = 1500
-    combat_efficiency = 0.20
+    enemy_paper_DPS: float = 1500
+    combat_efficiency: float = 0.05
 
-    target_top_speed = 300  # units/sec
-    target_acceleration = 75  # units/sec²
-    target_turn_rate = 60  # deg/sec
+    target_top_speed: float = 300  # units/sec
+    target_acceleration: float = 75  # units/sec²
+    target_turn_rate: float = 60  # deg/sec
 
     shield_dps_weight: float = 100
     hull_dps_weight: float = 0.5
@@ -155,7 +155,7 @@ def get_solution(db: DataBase, ship: Ship, settings: Settings) -> SolutionResult
     # Energy
     # TODO: Review theese constraints: are they optimal? What problem do they solve?
     prob += energy_generation >= (
-        idle_energy + burst_energy * settings.combat_intencity
+        idle_energy + burst_energy * settings.combat_intensity
     )
     prob += energy_capacity >= (burst_energy - energy_generation) * settings.burst_time
 
@@ -169,7 +169,7 @@ def get_solution(db: DataBase, ship: Ship, settings: Settings) -> SolutionResult
     # Shield generation
     # Note: incoming_DPS != paper_DPS (movement, misses, kills etc.)
     expected_incoming_DPS = settings.enemy_paper_DPS * settings.combat_efficiency
-    prob += shield_generation >= settings.combat_efficiency * expected_incoming_DPS
+    prob += shield_generation >= expected_incoming_DPS
 
     # Movement
     # TODO: support reverse thrust
@@ -213,7 +213,7 @@ def get_shopping_list_table(solution: SolutionResult) -> Table:
         cost = outfit.cost
 
         table.add_row(name, f"{count:.0f}", category)
-        total_cost += cost
+        total_cost += cost * count
 
     table.add_row(
         Text("Total", style=Style(bold=True), justify="right"),
@@ -365,10 +365,10 @@ def main():
 
     assert target_ship.outfits is not None
     baseline_outfits = {
-        o: count for o, count in target_ship.outfits.items() if isinstance(o, Weapon)
+        o: count for o, count in target_ship.outfits.items() if isinstance(o, Outfit)
     }
     baseline_weapons = {
-        o: count for o, count in target_ship.outfits.items() if isinstance(o, Outfit)
+        o: count for o, count in target_ship.outfits.items() if isinstance(o, Weapon)
     }
     baseline = SolutionResult(baseline_outfits, baseline_weapons)
 

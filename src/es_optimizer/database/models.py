@@ -16,7 +16,7 @@ class ShipCategory(Enum):
     Utility = "Utility"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Ship:
     # --- Common attributs ---
     name: str
@@ -51,7 +51,7 @@ class WeaponCategory(Enum):
     Guns = "Guns"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Weapon:
     """
     :param name: weapon name.
@@ -109,7 +109,7 @@ class OutfitCategory(Enum):
     Engines = "Engines"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Outfit:
     """
     :param name: outfit name.

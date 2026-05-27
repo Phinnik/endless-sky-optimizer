@@ -361,7 +361,7 @@ def main():
     console = Console()
     db = load()
 
-    target_ship = db.ships["Falcon"]
+    target_ship = db.ships["Protector"]
 
     assert target_ship.outfits is not None
     baseline_outfits = {
@@ -389,7 +389,19 @@ def main():
 
     solution = baseline
 
-    settings = Settings()
+    settings = Settings(
+        combat_intensity=0.5,
+        burst_time=30,
+        heat_safety_factor=0.95,
+        enemy_paper_DPS=1500,
+        combat_efficiency=0.05,
+        target_top_speed=300,  # units/sec
+        target_acceleration=75,  # units/sec²
+        target_turn_rate=60,  # deg/sec
+        shield_dps_weight=100,
+        hull_dps_weight=0.5,
+        cost_weight=0.000_000_001,
+    )
 
     solution = get_solution(db, target_ship, settings)
 

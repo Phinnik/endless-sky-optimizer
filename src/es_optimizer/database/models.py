@@ -44,6 +44,9 @@ class Ship:
     fuel_capacity: int
     cargo_space: int
 
+    # --- Stock outfits ---
+    outfits: dict[Outfit | Weapon, int] | None
+
 
 class WeaponCategory(Enum):
     Turrets = "Turrets"

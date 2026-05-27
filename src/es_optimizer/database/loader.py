@@ -21,7 +21,19 @@ def _attrs(node: Node) -> dict[str, str]:
     }
 
 
-def load_ships(tree: Node) -> list[Ship]:
+def _outfits(node: Node) -> dict[str, int]:
+    return {
+        c.key: int(c.value) if c.value is not None else 1
+        for c in node.children
+        if isinstance(c.key, str)
+        and (isinstance(c.value, str) or c.value is None)
+        and not c.children
+    }
+
+
+def load_ships(
+    tree: Node, outfits: dict[str, Outfit] | None, weapons: dict[str, Weapon] | None
+) -> list[Ship]:
     ships: list[Ship] = []
     for ship_node in tree.children:
         # Skip ship modifications: they differ only in the outfits installed
@@ -38,6 +50,20 @@ def load_ships(tree: Node) -> list[Ship]:
                 gun_ports += 1
             if child.key == "turret":
                 turret_mounts += 1
+
+        outfits_node = next(c for c in ship_node.children if c.key == "outfits")
+
+        outfits_: dict[Weapon | Outfit, int] | None = None
+        if outfits and weapons:
+            outfits_ = {}
+            for o, count in _outfits(outfits_node).items():
+                if o in outfits:
+                    outfits_[outfits[o]] = count
+                elif o in weapons:
+                    outfits_[weapons[o]] = count
+                else:
+                    # Skip ammunition
+                    continue
 
         ships.append(
             Ship(
@@ -58,6 +84,7 @@ def load_ships(tree: Node) -> list[Ship]:
                 gun_ports=gun_ports,
                 turret_mounts=turret_mounts,
                 engine_capacity=int(a["engine capacity"]),
+                outfits=outfits_,
             )
         )
     return ships
@@ -152,7 +179,6 @@ class DataBase:
 def load(data: str | Path = data_dir) -> DataBase:
     data = Path(data)
 
-    ships = {s.name: s for s in load_ships(make_tree((data / "ships.txt").read_text()))}
     weapons = {
         w.name: w for w in load_weapons(make_tree((data / "weapons.txt").read_text()))
     }
@@ -161,6 +187,12 @@ def load(data: str | Path = data_dir) -> DataBase:
         for s in load_outfits(make_tree((data / "outfits.txt").read_text()))
         + load_outfits(make_tree((data / "engines.txt").read_text()))
         + load_outfits(make_tree((data / "power.txt").read_text()))
+    }
+    ships = {
+        s.name: s
+        for s in load_ships(
+            make_tree((data / "ships.txt").read_text()), outfits, weapons
+        )
     }
 
     return DataBase(ships=ships, weapons=weapons, outfits=outfits)

@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from itertools import chain
-from typing import TypeAlias
 
 import pulp
 from rich.columns import Columns
@@ -10,38 +9,11 @@ from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
-from es_optimizer.database.loader import load
+from es_optimizer.database.loader import DataBase, load
 from es_optimizer.database.models import Outfit, Ship, Weapon, WeaponCategory
+from es_optimizer.helpets import value_of
 
 FPS = 60
-Valued: TypeAlias = pulp.LpVariable | pulp.LpAffineExpression
-
-
-def value_of(x: Valued) -> float:
-    value = x.value()
-    assert value is not None, "f{x} has no value - Is the problem solved?"
-    return value
-
-
-console = Console()
-
-
-db = load()
-
-db.weapons = {
-    name: weapon
-    for name, weapon in db.weapons.items()
-    if weapon.category != WeaponCategory.SecondaryWeapons
-}
-db.outfits = {
-    name: outfit
-    for name, outfit in db.outfits.items()
-    if name not in ["Outfits Expansion"]
-}
-db.outfits = {
-    name: outfit for name, outfit in db.outfits.items() if "Regenerator" not in name
-}
-target_ship = db.ships["Falcon"]
 
 
 @dataclass(frozen=True)
@@ -50,7 +22,7 @@ class SolutionResult:
     outfits: dict[Outfit, int]
 
 
-def get_solution() -> SolutionResult:
+def get_solution(db: DataBase, target_ship: Ship) -> SolutionResult:
     prob = pulp.LpProblem(sense=pulp.LpMaximize)
 
     weapons_count: dict[str, pulp.LpVariable] = pulp.LpVariable.dict(
@@ -60,142 +32,130 @@ def get_solution() -> SolutionResult:
         "outfits_count", db.outfits.keys(), 0, 50, cat=pulp.LpInteger
     )
 
-    total_cost = pulp.LpAffineExpression()
+    cost = pulp.LpAffineExpression()
     total_mass = pulp.LpAffineExpression(target_ship.mass)
-    total_shields = pulp.LpAffineExpression()
-    total_hull = pulp.LpAffineExpression()
 
-    total_outfit_space = pulp.LpAffineExpression()
-    total_weapon_capacity = pulp.LpAffineExpression()
-    total_gun_ports = pulp.LpAffineExpression()
-    total_turret_mounts = pulp.LpAffineExpression()
-    total_engine_capacity = pulp.LpAffineExpression()
+    outfit_space = pulp.LpAffineExpression()
+    weapon_capacity = pulp.LpAffineExpression()
+    gun_ports = pulp.LpAffineExpression()
+    turret_mounts = pulp.LpAffineExpression()
+    engine_capacity = pulp.LpAffineExpression()
 
-    idle_energy_cost = pulp.LpAffineExpression()  # idle
-    burst_additional_energy_cost = pulp.LpAffineExpression()  # fire + movement
-    total_max_heat_cost = pulp.LpAffineExpression()
+    idle_energy = pulp.LpAffineExpression()
+    burst_energy = pulp.LpAffineExpression()
+    idle_heat = pulp.LpAffineExpression()
+    burst_heat = pulp.LpAffineExpression()
 
     total_cooling = pulp.LpAffineExpression()
-    total_shield_generation = pulp.LpAffineExpression()
+    shield_generation = pulp.LpAffineExpression()
 
     # Speed
-    total_thrust = pulp.LpAffineExpression()
-    total_turn = pulp.LpAffineExpression()
-    total_reverse_thrust = pulp.LpAffineExpression()
+    thrust = pulp.LpAffineExpression()
+    turn = pulp.LpAffineExpression()
 
     # Damage
-    total_shield_damage = pulp.LpAffineExpression()
-    total_hull_damage = pulp.LpAffineExpression()
+    shield_dps = pulp.LpAffineExpression()
+    hull_dps = pulp.LpAffineExpression()
 
     # Energy generation
-    total_energy_capacity = pulp.LpAffineExpression()
-    total_energy_generation = pulp.LpAffineExpression()
-    total_solar_collection = pulp.LpAffineExpression()
+    energy_capacity = pulp.LpAffineExpression()
+    energy_generation = pulp.LpAffineExpression()
+    solar_collection = pulp.LpAffineExpression()
 
     for weapon_name, v in weapons_count.items():
         weapon = db.weapons[weapon_name]
 
-        total_cost += weapon.cost * v
+        cost += weapon.cost * v
         total_mass += weapon.mass * v
-        burst_additional_energy_cost += (weapon.firing_energy * 60 / weapon.reload) * v
-        total_max_heat_cost += (weapon.firing_heat * 60 / weapon.reload) * v
+        burst_energy += (weapon.firing_energy * 60 / weapon.reload) * v
+        burst_heat += (weapon.firing_heat * 60 / weapon.reload) * v
 
-        total_shield_damage += (weapon.shield_damage * 60 / weapon.reload) * v
-        total_hull_damage += (weapon.hull_damage * 60 / weapon.reload) * v
+        shield_dps += (weapon.shield_damage * 60 / weapon.reload) * v
+        hull_dps += (weapon.hull_damage * 60 / weapon.reload) * v
 
-        total_outfit_space += weapon.outfit_space * v
-        total_weapon_capacity += weapon.weapon_capacity * v
-        total_gun_ports += weapon.gun_ports * v
-        total_turret_mounts += weapon.turret_mounts * v
+        outfit_space += weapon.outfit_space * v
+        weapon_capacity += weapon.weapon_capacity * v
+        gun_ports += weapon.gun_ports * v
+        turret_mounts += weapon.turret_mounts * v
 
     for outfit_name, v in outfits_count.items():
         outfit = db.outfits[outfit_name]
 
-        total_cost += outfit.cost * v
+        cost += outfit.cost * v
         total_mass += outfit.mass * v
-        total_cooling += (outfit.cooling * 60) * v
-        total_shield_generation += (outfit.shield_generation * 60) * v
-        burst_additional_energy_cost += (outfit.shield_energy * 60) * v
+        total_cooling += outfit.cooling * v * FPS
+        shield_generation += outfit.shield_generation * v * FPS
+        burst_energy += outfit.shield_energy * v * FPS
 
-        total_thrust += outfit.thrust * v
-        burst_additional_energy_cost += (outfit.thrusting_energy * 60) * v
-        total_max_heat_cost += (outfit.thrusting_heat * 60) * v
+        thrust += outfit.thrust * v
+        burst_energy += outfit.thrusting_energy * v * FPS
+        burst_heat += outfit.thrusting_heat * v * FPS
 
-        total_turn += outfit.turn * v
-        burst_additional_energy_cost += (outfit.turning_energy * 60) * v
-        total_max_heat_cost += (outfit.turning_heat * 60) * v
+        turn += outfit.turn * v
+        burst_energy += outfit.turning_energy * v * FPS
+        burst_heat += outfit.turning_heat * v * FPS
 
         # # TODO: Thrusting cannot be done forward and backward simultaniously
         # total_reverse_thrust += outfit.reverse_thrust * v
         # total_max_energy_cost += outfit.reverse_thrusting_energy * v
         # total_max_heat_cost += outfit.reverse_thrusting_heat * v
 
-        total_energy_capacity += outfit.energy_capacity * v
-        total_energy_generation += (outfit.energy_generation * 60) * v
-        total_solar_collection += (outfit.solar_collection * 60) * v
+        energy_capacity += outfit.energy_capacity * v
+        energy_generation += outfit.energy_generation * v * FPS
+        solar_collection += outfit.solar_collection * v * FPS
 
-        idle_energy_cost += (outfit.energy_consumption * 60) * v
-        total_max_heat_cost += (outfit.heat_generation * 60) * v
+        idle_energy += outfit.energy_consumption * v * FPS
+        idle_heat += outfit.heat_generation * v * FPS
 
-        total_outfit_space += outfit.outfit_space * v
-        total_weapon_capacity += outfit.weapon_capacity * v
-        total_engine_capacity += outfit.engine_capacity * v
+        outfit_space += outfit.outfit_space * v
+        weapon_capacity += outfit.weapon_capacity * v
+        engine_capacity += outfit.engine_capacity * v
 
     prob += outfits_count["Hyperdrive"] == 1
+    prob += weapons_count["Anti-Missile Turret"] == 1
 
-    # Total constraints
+    # Space and capacity
+    prob += outfit_space + target_ship.outfit_space >= 0
+    prob += weapon_capacity + target_ship.weapon_capacity >= 0
+    prob += gun_ports + target_ship.gun_ports >= 0
+    prob += turret_mounts + target_ship.turret_mounts >= 0
+    prob += engine_capacity + target_ship.engine_capacity >= 0
 
-    # total_mass
-    # total_shields
-    # total_hull
-
-    prob += total_outfit_space + target_ship.outfit_space >= 0
-    prob += total_weapon_capacity + target_ship.weapon_capacity >= 0
-    prob += total_gun_ports + target_ship.gun_ports >= 0
-    prob += total_turret_mounts + target_ship.turret_mounts >= 0
-    prob += total_engine_capacity + target_ship.engine_capacity >= 0
-
-    light_combat_duty = 0.5
-    burst_time = 30
-    prob += total_energy_generation >= (
-        idle_energy_cost + burst_additional_energy_cost * light_combat_duty
-    )
-    prob += (
-        total_energy_capacity
-        >= (burst_additional_energy_cost - total_energy_generation) * burst_time
-    )
+    # Energy
+    # TODO: Review theese constraints: are they optimal? What problem do they solve?
+    combat_intencity = 0.5  # TODO: make a setting
+    burst_time = 30  # TODO: make a setting
+    prob += energy_generation >= (idle_energy + burst_energy * combat_intencity)
+    prob += energy_capacity >= (burst_energy - energy_generation) * burst_time
 
     # Heat and cooling
-    safety_factor = 0.8
-    max_heat = (target_ship.mass + total_mass) * 100
-    H_eq = (total_max_heat_cost - total_cooling) / (target_ship.heat_dissipation * 0.06)
-    prob += H_eq <= (safety_factor * max_heat)
+    heat_safety_factor = 0.95  # TODO: make a setting
+    max_heat = total_mass * 100  # 100 - MAXIMUM_TEMPERATURE
+    heat_equilibrium = (idle_heat + burst_heat - total_cooling) / (
+        target_ship.heat_dissipation * 0.001 * FPS
+    )
+    prob += heat_equilibrium <= (heat_safety_factor * max_heat)
 
-    # shield generation
-    expected_incoming_DPS = 150
-    k = 0.6
-    prob += total_shield_generation >= k * expected_incoming_DPS
+    # Shield generation
+    # Note: incoming_DPS != paper_DPS (movement, misses, kills etc.)
+    enemy_paper_DPS = 1500  # TODO: make a setting
+    combat_efficiency = 0.20  # TODO: make a setting
+    expected_incoming_DPS = enemy_paper_DPS * combat_efficiency
+    prob += shield_generation >= combat_efficiency * expected_incoming_DPS
 
-    # Acceleration, max speed and turn
-    # min_acceleration
-    # min_rotation
+    # Movement
+    # TODO: support reverse thrust
+    target_top_speed = 300  # units/sec # TODO: make a setting
+    target_acceleration = 75  # units/sec² # TODO: make a setting
+    target_turn_rate = 60  # deg/sec # TODO: make a setting
 
-    prob += total_thrust >= 1
-    prob += total_turn >= 1
-    # total_reverse_thrust
-
-    # # Damage
-    # total_shield_damage
-    # total_hull_damage
-
-    # # Energy generation
-    # total_energy_capacity
-    # total_energy_generation
-    # total_solar_collection
+    prob += thrust >= target_top_speed * target_ship.drag / FPS
+    prob += thrust * FPS**2 >= target_acceleration * total_mass
+    prob += turn * FPS >= target_turn_rate * total_mass
 
     # Objective
-    prob += (total_shield_damage + total_hull_damage) - (total_cost / 1_000)
-    # prob += (1 * total_shield_damage + 0.5 * total_hull_damage) - (total_cost / 1_000_000)
+    # TODO: make coefficients as settings
+    prob += (10000 * shield_dps + 0.5 * hull_dps) - cost / 10_000_000
 
     status = prob.solve(solver=pulp.PULP_CBC_CMD(msg=False))
     assert status == pulp.LpStatusOptimal, (
@@ -313,12 +273,13 @@ def get_capacity_table(solution: SolutionResult, ship: Ship) -> Table:
     return table
 
 
-def get_heat_and_energy_table(solution: SolutionResult) -> Table:
+def get_heat_and_energy_table(solution: SolutionResult, ship: Ship) -> Table:
     table = Table("", "energy", "heat")
     idle_energy = 0
     idle_heat = 0
     burst_energy = 0
     burst_heat = 0
+    cooling = 0
 
     for outfit, count in chain(solution.outfits.items(), solution.weapons.items()):
         if isinstance(outfit, Outfit):
@@ -344,6 +305,7 @@ def get_heat_and_energy_table(solution: SolutionResult) -> Table:
                 * count
                 * FPS
             )
+            cooling += outfit.cooling * count * FPS
 
         if isinstance(outfit, Weapon):
             burst_energy -= outfit.firing_energy * count * FPS
@@ -352,30 +314,73 @@ def get_heat_and_energy_table(solution: SolutionResult) -> Table:
     burst_energy += idle_energy
     burst_heat += idle_heat
 
+    heat_equilibrium = (burst_heat - cooling) / (ship.heat_dissipation * 0.001 * FPS)
+
     table.add_row("idle", f"{idle_energy:,.0f}", f"{idle_heat:,.0f}")
     table.add_row("burst", f"{burst_energy:,.0f}", f"{burst_heat:,.0f}")
+
+    table.add_row("heat_equilibrium", "", f"{heat_equilibrium:,.0f}")
     table.add_row("max")  # TODO: max - energy capacity and max temperature
     return table
 
 
+def get_shield_table(solution: SolutionResult):
+    shield_generation = 0
+    for outfit, count in solution.outfits.items():
+        shield_generation += outfit.shield_generation * count * FPS
+    table = Table(title="Shield generation", show_header=False)
+    table.add_row("shield_generation", f"{shield_generation:,.2f}")
+    return table
+
+
 def main():
-    solution = get_solution()
+    console = Console()
+    db = load()
+
+    target_ship = db.ships["Falcon"]
+
+    assert target_ship.outfits is not None
+    baseline_outfits = {
+        o: count for o, count in target_ship.outfits.items() if isinstance(o, Weapon)
+    }
+    baseline_weapons = {
+        o: count for o, count in target_ship.outfits.items() if isinstance(o, Outfit)
+    }
+    baseline = SolutionResult(baseline_outfits, baseline_weapons)
+
+    db.weapons = {
+        name: weapon
+        for name, weapon in db.weapons.items()
+        if weapon.category != WeaponCategory.SecondaryWeapons
+        and weapon.name not in ["Heavy Blaster", "Plasma Repeater"]
+    }
+    db.outfits = {
+        name: outfit
+        for name, outfit in db.outfits.items()
+        if name not in ["Outfits Expansion"]
+    }
+    db.outfits = {
+        name: outfit for name, outfit in db.outfits.items() if "Regenerator" not in name
+    }
+
+    solution = baseline
+
+    solution = get_solution(db, target_ship)
 
     console.print(Rule("Results"))
+    console.print(get_shopping_list_table(solution))
     console.print(
         Columns(
             [
-                get_shopping_list_table(solution),
                 Group(
                     get_movement_table(solution, target_ship),
                     get_dps_table(solution),
+                    get_shield_table(solution),
                 ),
                 Group(
                     get_capacity_table(solution, target_ship),
-                    get_heat_and_energy_table(solution),
+                    get_heat_and_energy_table(solution, target_ship),
                 ),
-                # parameters_table
-                # debug_table
             ]
         )
     )
